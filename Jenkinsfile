@@ -41,6 +41,15 @@ pipeline {
             maven:3.9-eclipse-temurin-17 \
             mvn -U -B clean test
 
+          docker run --rm \
+            -v ws_${env.JOB_NAME}_${env.BUILD_NUMBER}_:/ws -w /ws \
+            maven:3.9-eclipse-temurin-17 \
+            mvn -U -B clean test \
+              -Denv=dev \
+              -Dusername=deepan \
+              -Dpassword=chelliah \
+              -DbaseUrl=http://host.docker.internal:YOUR_PORT
+
           # Copy target/ back into Jenkins workspace so Jenkins can archive/publish
           docker cp "$CID":/ws/target ./target || true
 
