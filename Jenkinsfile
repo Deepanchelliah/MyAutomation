@@ -1,6 +1,9 @@
 pipeline {
   agent any
-  options { timestamps() }
+  options {
+    timestamps()
+    skipDefaultCheckout(true)   // removes the extra "Declarative: Checkout SCM"
+  }
 
   stages {
     stage('Clean workspace') {
@@ -17,29 +20,32 @@ pipeline {
           set -eux
           docker version
 
-          # POSIX-safe "sanitize" for volume name
+          # Create a temp docker volume for this build
           VOL="ws_$(echo "$BUILD_TAG" | tr -cs 'A-Za-z0-9_.-' '_' )"
-
           docker volume create "$VOL" >/dev/null
 
-          docker run --rm \
-            -v "$VOL":/ws \
-            -v "$(pwd)":/src \
-            alpine sh -lc 'cd /src && tar -cf - . | (cd /ws && tar -xf -)'
+          # Create a helper container with the volume mounted
+          CID=$(docker create -v "$VOL":/ws alpine:3.19 sh -c "sleep 600")
 
-          docker run --rm -v "$VOL":/ws -w /ws alpine sh -lc 'ls -la; test -f pom.xml'
+          # Copy workspace contents into the volume via docker cp (no bind mounts)
+          docker cp . "$CID":/ws
 
+          # Sanity check: pom.xml must exist inside /ws
+          docker start "$CID" >/dev/null
+          docker exec "$CID" sh -lc 'ls -la /ws && test -f /ws/pom.xml'
+
+          # Run Maven tests using the volume as /ws
           docker run --rm \
             -v "$VOL":/ws \
             -w /ws \
             maven:3.9-eclipse-temurin-17 \
             mvn -U -B clean test
 
-          docker run --rm \
-            -v "$VOL":/ws \
-            -v "$(pwd)":/dst \
-            alpine sh -lc 'cp -a /ws/target /dst/ || true'
+          # Copy target/ back into Jenkins workspace so Jenkins can archive/publish
+          docker cp "$CID":/ws/target ./target || true
 
+          # Cleanup
+          docker rm -f "$CID" >/dev/null
           docker volume rm "$VOL" >/dev/null
         '''
       }
@@ -51,11 +57,9 @@ pipeline {
       }
     }
 
-
-
     stage('Publish Allure Report') {
       steps {
-        // Requires Allure Jenkins plugin
+        // Requires Jenkins Allure plugin and results generated at target/allure-results
         allure results: [[path: 'target/allure-results']]
       }
     }
