@@ -17,18 +17,35 @@ pipeline {
           set -eux
           docker version
 
-          echo "Current dir:"
-          pwd
-          echo "Repo contents:"
-          ls -la
-          echo "POM exists?"
-          test -f pom.xml
+          VOL="ws_${BUILD_TAG//[^a-zA-Z0-9_.-]/_}"
 
+          # Create a temp volume for this build
+          docker volume create "$VOL" >/dev/null
+
+          # Copy Jenkins workspace into the volume
           docker run --rm \
-            -v "$(pwd)":/ws \
+            -v "$VOL":/ws \
+            -v "$(pwd)":/src \
+            alpine sh -lc 'cp -a /src/. /ws/'
+
+          # Sanity check inside container
+          docker run --rm -v "$VOL":/ws -w /ws alpine sh -lc 'ls -la; test -f pom.xml'
+
+          # Run Maven
+          docker run --rm \
+            -v "$VOL":/ws \
             -w /ws \
             maven:3.9-eclipse-temurin-17 \
             mvn -U -B clean test
+
+          # Copy results back to Jenkins workspace
+          docker run --rm \
+            -v "$VOL":/ws \
+            -v "$(pwd)":/dst \
+            alpine sh -lc 'cp -a /ws/target /dst/ || true'
+
+          # Cleanup volume
+          docker volume rm "$VOL" >/dev/null
         '''
       }
       post {
@@ -38,6 +55,7 @@ pipeline {
         }
       }
     }
+
 
     stage('Publish Allure Report') {
       steps {
