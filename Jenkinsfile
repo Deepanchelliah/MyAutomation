@@ -16,7 +16,7 @@ pipeline {
         sh '''
           set -eux
           docker version
-
+          PROJECT_DIR="MyAutomation"
           docker run --rm \
             -v "$WORKSPACE":/ws \
             -w /ws \
