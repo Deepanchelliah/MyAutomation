@@ -16,9 +16,16 @@ pipeline {
         sh '''
           set -eux
           docker version
-          PROJECT_DIR="MyAutomation"
+
+          echo "Current dir:"
+          pwd
+          echo "Repo contents:"
+          ls -la
+          echo "POM exists?"
+          test -f pom.xml
+
           docker run --rm \
-            -v "$WORKSPACE":/ws \
+            -v "$(pwd)":/ws \
             -w /ws \
             maven:3.9-eclipse-temurin-17 \
             mvn -U -B clean test
@@ -26,17 +33,15 @@ pipeline {
       }
       post {
         always {
-          // JUnit reports (helps Jenkins show test results)
           junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
-          // Archive the raw Allure results
-          archiveArtifacts artifacts: 'target/allure-results/**', allowEmptyArchive: true
+          archiveArtifacts artifacts: 'target/**', allowEmptyArchive: true
         }
       }
     }
 
     stage('Publish Allure Report') {
       steps {
-        // Requires Jenkins Allure plugin
+        // Requires Allure Jenkins plugin
         allure results: [[path: 'target/allure-results']]
       }
     }
