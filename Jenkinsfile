@@ -13,33 +13,6 @@ pipeline {
     stage('Checkout') {
       steps { checkout scm }
     }
-    stage('Run API + Tests') {
-      steps {
-        sh '''
-          set -eux
-
-          # Create network
-          docker network create mytest-net || true
-
-          # Start your API container (example)
-          docker run -d --rm --name myapi --network mytest-net -p 8080:8080 myapi:latest
-
-          # Run tests against the API container name (NOT localhost)
-          docker run --rm --network mytest-net \
-            -v "$PWD":/ws -w /ws \
-            -e BASE_URL="http://myapi:8080" \
-            maven:3.9-eclipse-temurin-17 mvn -B clean test
-
-          # Stop API
-          docker stop myapi
-        '''
-      }
-      post {
-        always {
-          junit 'target/surefire-reports/*.xml'
-        }
-      }
-    }
 
     stage('Run Tests (Maven in Docker)') {
       steps {
