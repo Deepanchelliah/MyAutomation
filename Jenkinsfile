@@ -25,7 +25,7 @@ pipeline {
           docker run --rm \
             -v "$VOL":/ws \
             -v "$(pwd)":/src \
-            alpine sh -lc 'cp -a /src/. /ws/'
+            alpine sh -lc 'cd /src && tar -cf - . | (cd /ws && tar -xf -)'
 
           docker run --rm -v "$VOL":/ws -w /ws alpine sh -lc 'ls -la; test -f pom.xml'
 
