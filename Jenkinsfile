@@ -4,15 +4,11 @@ pipeline {
 
   stages {
     stage('Clean workspace') {
-      steps {
-        deleteDir()
-      }
+      steps { deleteDir() }
     }
 
     stage('Checkout') {
-      steps {
-        checkout scm
-      }
+      steps { checkout scm }
     }
 
     stage('Run Tests (Maven in Docker)') {
@@ -27,6 +23,21 @@ pipeline {
             maven:3.9-eclipse-temurin-17 \
             mvn -U -B clean test
         '''
+      }
+      post {
+        always {
+          // JUnit reports (helps Jenkins show test results)
+          junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
+          // Archive the raw Allure results
+          archiveArtifacts artifacts: 'target/allure-results/**', allowEmptyArchive: true
+        }
+      }
+    }
+
+    stage('Publish Allure Report') {
+      steps {
+        // Requires Jenkins Allure plugin
+        allure results: [[path: 'target/allure-results']]
       }
     }
   }
