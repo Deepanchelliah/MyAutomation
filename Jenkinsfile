@@ -1,76 +1,48 @@
 pipeline {
   agent any
-  options {
-    timestamps()
-    skipDefaultCheckout(true)   // removes the extra "Declarative: Checkout SCM"
+
+  tools {
+    jdk 'JDK22'
+    maven 'Maven3'
   }
 
   stages {
-    stage('Clean workspace') {
-      steps { deleteDir() }
-    }
-
     stage('Checkout') {
-      steps { checkout scm }
+      steps {
+        checkout scm
+      }
     }
 
-    stage('Run Tests (Maven in Docker)') {
+    stage('Run Tests') {
       steps {
-        sh '''
-          set -eux
-          docker version
-
-          # Create a temp docker volume for this build
-          VOL="ws_$(echo "$BUILD_TAG" | tr -cs 'A-Za-z0-9_.-' '_' )"
-          docker volume create "$VOL" >/dev/null
-
-          # Create a helper container with the volume mounted
-          CID=$(docker create -v "$VOL":/ws alpine:3.19 sh -c "sleep 600")
-
-          # Copy workspace contents into the volume via docker cp (no bind mounts)
-          docker cp . "$CID":/ws
-
-          # Sanity check: pom.xml must exist inside /ws
-          docker start "$CID" >/dev/null
-          docker exec "$CID" sh -lc 'ls -la /ws && test -f /ws/pom.xml'
-
-          # Run Maven tests using the volume as /ws
-          docker run --rm \
-            -v "$VOL":/ws \
-            -w /ws \
-            maven:3.9-eclipse-temurin-17 \
-            mvn -U -B clean test
-
-          docker run --rm \
-            -v ws_${env.JOB_NAME}_${env.BUILD_NUMBER}_:/ws -w /ws \
-            maven:3.9-eclipse-temurin-17 \
-            mvn -U -B clean test \
+        withCredentials([usernamePassword(
+          credentialsId: 'api-login',
+          usernameVariable: 'USERNAME',
+          passwordVariable: 'PASSWORD'
+        )]) {
+          sh """
+            mvn clean test \
               -Denv=dev \
-              -Dusername=deepan \
-              -Dpassword=chelliah \
-              -DbaseUrl=http://host.docker.internal:YOUR_PORT
-
-          # Copy target/ back into Jenkins workspace so Jenkins can archive/publish
-          docker cp "$CID":/ws/target ./target || true
-
-          # Cleanup
-          docker rm -f "$CID" >/dev/null
-          docker volume rm "$VOL" >/dev/null
-        '''
-      }
-      post {
-        always {
-          junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
-          archiveArtifacts artifacts: 'target/**', allowEmptyArchive: true
+              -Dusername=$USERNAME \
+              -Dpassword=$PASSWORD \
+              -Dallure.results.directory=target/allure-results
+          """
         }
       }
     }
+  }
 
-    stage('Publish Allure Report') {
-      steps {
-        // Requires Jenkins Allure plugin and results generated at target/allure-results
-        allure results: [[path: 'target/allure-results']]
-      }
+  post {
+    always {
+      // Publish Allure Report
+      allure([
+        includeProperties: false,
+        jdk: '',
+        results: [[path: 'target/allure-results']]
+      ])
+
+      // Publish JUnit report (optional but useful)
+      junit 'target/surefire-reports/*.xml'
     }
   }
 }
