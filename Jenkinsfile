@@ -34,15 +34,16 @@ pipeline {
 
   post {
     always {
-      // Publish Allure Report
+      junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+      archiveArtifacts artifacts: 'target/allure-results/**/*', allowEmptyArchive: true
+
       allure([
         includeProperties: false,
         jdk: '',
+        commandline: 'Allure2',
         results: [[path: 'target/allure-results']]
       ])
-
-      // Publish JUnit report (optional but useful)
-      junit 'target/surefire-reports/*.xml'
     }
   }
+
 }
