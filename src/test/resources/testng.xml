@@ -1,0 +1,11 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd" >
+<suite name="OAuth2 JWT Resource Server Suite" parallel="tests" thread-count="2">
+    <test name="Resource API Tests">
+        <classes>
+            <class name="example.resource.ResourceTests"/>
+        </classes>
+    </test>
+    <listeners>
+        <listener class-name="io.qameta.allure.testng.AllureTestNg"/>
+    </listeners>
+</suite>
