@@ -1,32 +1,32 @@
 pipeline {
-  agent {
-    docker {
-      image 'maven:3.9-eclipse-temurin-17'
-    }
-  }
-
+  agent any
   options { timestamps() }
 
   stages {
+    stage('Clean workspace') {
+      steps {
+        deleteDir()
+      }
+    }
+
     stage('Checkout') {
-      steps { checkout scm }
-    }
-
-    stage('Run Tests') {
       steps {
-        sh 'mvn -U -B clean test'
-      }
-      post {
-        always {
-          junit testResults: '**/target/surefire-reports/*.xml', allowEmptyResults: true
-          archiveArtifacts artifacts: 'target/allure-results/**', allowEmptyArchive: true
-        }
+        checkout scm
       }
     }
 
-    stage('Publish Allure') {
+    stage('Run Tests (Maven in Docker)') {
       steps {
-        allure results: [[path: 'target/allure-results']]
+        sh '''
+          set -eux
+          docker version
+
+          docker run --rm \
+            -v "$WORKSPACE":/ws \
+            -w /ws \
+            maven:3.9-eclipse-temurin-17 \
+            mvn -U -B clean test
+        '''
       }
     }
   }
